@@ -31,6 +31,7 @@ class LinkSearchResults(TypedDict):
 	value: str
 	description: str
 	label: NotRequired[str]
+	description_html: NotRequired[bool]
 
 
 # this is called by the Link Field
@@ -110,15 +111,21 @@ def search_widget(
 		filters = {}
 
 	if query:  # Query = custom search query i.e. python function
+		meta = frappe.get_meta(doctype)
+		# For translated doctypes, pass empty txt and a large page_length so the custom query
+		# returns all records without SQL-level text filtering; Python-level filtering against
+		# translated values is applied below.
+		query_txt = "" if meta.translated_doctype else txt
+		query_page_length = PAGE_LENGTH_FOR_LINK_VALIDATION if meta.translated_doctype else page_length
 		try:
 			is_whitelisted(frappe.get_attr(query))
-			return frappe.call(
+			values = frappe.call(
 				query,
 				doctype,
-				txt,
+				query_txt,
 				searchfield,
 				start,
-				page_length,
+				query_page_length,
 				filters,
 				as_dict=as_dict,
 				reference_doctype=reference_doctype,
@@ -136,6 +143,14 @@ def search_widget(
 					http_status_code=404,
 				)
 				return []
+
+		if not for_link_validation:
+			if meta.translated_doctype:
+				values = filter_translated(values, txt, as_dict)
+				values = sorted(values, key=lambda x: relevance_sorter(x, txt, as_dict))
+				values = values[:page_length]
+
+		return values
 
 	meta = frappe.get_meta(doctype)
 
@@ -227,15 +242,7 @@ def search_widget(
 
 	if not for_link_validation:
 		if meta.translated_doctype:
-			# Filtering the values array so that query is included in very element
-			values = (
-				result
-				for result in values
-				if any(
-					re.search(f"{re.escape(txt)}.*", _(cstr(value)) or "", re.IGNORECASE)
-					for value in (result.values() if as_dict else result)
-				)
-			)
+			values = filter_translated(values, txt, as_dict)
 
 		# Sorting the values array so that relevant results always come first
 		# This will first bring elements on top in which query is a prefix of element
@@ -348,6 +355,9 @@ def build_for_autosuggest(res: list[tuple], doctype: str) -> list[LinkSearchResu
 	meta = frappe.get_meta(doctype)
 	if meta.show_title_field_in_link:
 		for item in res:
+			if isinstance(item, dict):
+				results.append(item)
+				continue
 			item = list(item)
 			if len(item) == 1:
 				title_field = meta.title_field
@@ -370,6 +380,9 @@ def build_for_autosuggest(res: list[tuple], doctype: str) -> list[LinkSearchResu
 			results.append(autosuggest_row)
 	else:
 		for item in res:
+			if isinstance(item, dict):
+				results.append(item)
+				continue
 			label = _(item[0]) if meta.translated_doctype else item[0]
 			results.append({"value": item[0], "description": to_string(item[1:]), "label": label})
 
@@ -387,6 +400,18 @@ def scrub_custom_query(query, key, txt):
 def relevance_sorter(key, query, as_dict):
 	value = _(key.name if as_dict else key[0])
 	return (cstr(value).casefold().startswith(query.casefold()) is not True, value)
+
+
+def filter_translated(values, txt: str, as_dict: bool) -> list:
+	"""Return only those results where txt matches any translated field value."""
+	return [
+		result
+		for result in values
+		if any(
+			re.search(f"{re.escape(txt)}.*", _(cstr(value)) or "", re.IGNORECASE)
+			for value in (result.values() if as_dict else result)
+		)
+	]
 
 
 @frappe.whitelist()

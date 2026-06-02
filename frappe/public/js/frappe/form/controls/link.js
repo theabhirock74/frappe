@@ -256,10 +256,13 @@ frappe.ui.form.ControlLink = class ControlLink extends frappe.ui.form.ControlDat
 					// because it will not visible otherwise
 					(me.is_title_link() || d.value !== d.description)
 				) {
-					html +=
-						'<br><span class="small">' +
-						__(frappe.utils.html2text(frappe.utils.escape_html(d.description))) +
-						"</span>";
+					// description_html: true signals that the caller deliberately put HTML in
+					// the description (e.g. a custom query that highlights matches). Render it
+					// directly. Otherwise treat it as plain text and escape it.
+					const desc = d.description_html
+						? __(frappe.utils.html2text(frappe.utils.escape_html(d.description)))
+						: __(frappe.utils.escape_html(d.description));
+					html += '<br><span class="small">' + desc + "</span>";
 				}
 				return $(`<div role="option">`)
 					.on("click", (event) => {
@@ -850,9 +853,14 @@ frappe.ui.form.ControlLink = class ControlLink extends frappe.ui.form.ControlDat
 	}
 
 	apply_link_field_filters() {
-		let link_filters = JSON.parse(this.df.link_filters);
-		let filters = this.parse_filters(link_filters);
+		let filters = this.parse_filters(JSON.parse(this.df.link_filters));
 		// take filters from the link field and add to the query
+
+		const query_filters = this.get_query?.()?.filters || {};
+		if (query_filters) {
+			filters = { ...filters, ...query_filters };
+		}
+
 		this.get_query = function () {
 			return {
 				filters,
@@ -1067,9 +1075,17 @@ frappe.ui.form.ControlLink = class ControlLink extends frappe.ui.form.ControlDat
 };
 
 if (Awesomplete) {
+	Awesomplete.prototype._itemCursor = 0;
 	Awesomplete.prototype.get_item = function (value) {
-		return this._list.find(function (item) {
+		var matches = this._list.filter(function (item) {
 			return item.value === value;
 		});
+
+		if (matches.length === 0) return null;
+
+		var item = matches[this._itemCursor % matches.length];
+		this._itemCursor++;
+
+		return item;
 	};
 }

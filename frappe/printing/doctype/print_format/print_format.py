@@ -8,10 +8,12 @@ import frappe.utils
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils.jinja import validate_template
-from frappe.utils.weasyprint import download_pdf, get_html
+from frappe.utils.print_format_generator import download_pdf, get_html
 
 
 class PrintFormat(Document):
+	_DOCTYPE_NAME = "Print Format"
+
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
 
@@ -63,6 +65,13 @@ class PrintFormat(Document):
 	def before_save(self):
 		if self.print_format_for == "Report":
 			self.custom_format = 1
+
+		# New non-custom formats default to builder beta + Chrome
+		if self.is_new() and not self.custom_format:
+			self.print_format_builder_beta = 1
+
+		if self.print_format_builder_beta and not self.custom_format:
+			self.pdf_generator = "chrome"
 
 	def get_html(self, docname, letterhead=None):
 		return get_html(self.doc_type, docname, self.name, letterhead)
@@ -143,7 +152,7 @@ class PrintFormat(Document):
 	def export_doc(self):
 		from frappe.modules.utils import export_module_json
 
-		return export_module_json(self, self.standard == "Yes", self.module)
+		return export_module_json(self, self.standard == "Yes", self.module, create_init=False)
 
 	def on_trash(self):
 		if self.doc_type:
