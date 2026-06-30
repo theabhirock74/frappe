@@ -219,6 +219,24 @@
 					</div>
 				</div>
 
+				<!-- VISIBILITY section -->
+				<div class="pfb-insp-section">
+					<div class="pfb-insp-section-head" @click="toggle('t_visibility')">
+						<span class="pfb-insp-section-label">{{ __("Visibility") }}</span>
+						<span
+							class="pfb-insp-chevron"
+							:class="{ collapsed: !open.t_visibility }"
+							v-html="frappe.utils.icon('chevron-down', 'xs')"
+						></span>
+					</div>
+					<div v-show="open.t_visibility">
+						<VisibilitySection
+							v-model="selected_field.visible_if"
+							:previewDoc="preview_doc"
+						/>
+					</div>
+				</div>
+
 				<div class="pfb-insp-actions">
 					<button class="btn btn-xs btn-danger-subtle" @click="remove_field">
 						<span v-html="frappe.utils.icon('x', 'xs')"></span>
@@ -303,6 +321,20 @@
 									></button>
 								</div>
 							</div>
+							<div class="pfb-insp-row">
+								<span class="pfb-insp-label">{{ __("Spacing") }}</span>
+								<select
+									class="pfb-insp-select"
+									:value="current_label_justify"
+									@change="selected_field.label_justify = $event.target.value"
+								>
+									<option value="">{{ __("Normal") }}</option>
+									<option value="space-between">
+										{{ __("Space Between") }}
+									</option>
+									<option value="space-evenly">{{ __("Space Evenly") }}</option>
+								</select>
+							</div>
 						</template>
 					</div>
 				</div>
@@ -316,10 +348,11 @@
 							v-html="frappe.utils.icon('chevron-down', 'xs')"
 						></span>
 					</div>
-					<div v-show="open.f_visibility" class="pfb-insp-section-body">
-						<p class="pfb-insp-hint text-muted">
-							{{ __("Conditional visibility coming soon.") }}
-						</p>
+					<div v-show="open.f_visibility">
+						<VisibilitySection
+							v-model="selected_field.visible_if"
+							:previewDoc="preview_doc"
+						/>
 					</div>
 				</div>
 
@@ -527,10 +560,11 @@
 							v-html="frappe.utils.icon('chevron-down', 'xs')"
 						></span>
 					</div>
-					<div v-show="open.s_visibility" class="pfb-insp-section-body">
-						<p class="pfb-insp-hint text-muted">
-							{{ __("Conditional visibility coming soon.") }}
-						</p>
+					<div v-show="open.s_visibility">
+						<VisibilitySection
+							v-model="selected_section.visible_if"
+							:previewDoc="preview_doc"
+						/>
 					</div>
 				</div>
 
@@ -538,8 +572,17 @@
 					<button
 						class="btn btn-xs btn-danger-subtle"
 						@click="
-							selected_section.remove = true;
+							const section = store.selected_section.value;
+							const idx = layout.value.sections.indexOf(section);
+							if (idx !== -1) layout.value.sections.splice(idx, 1);
 							store.selected_section.value = null;
+							if (
+								section &&
+								section.columns.some((c) =>
+									c.fields.includes(store.selected_field.value)
+								)
+							)
+								store.selected_field.value = null;
 						"
 					>
 						<span v-html="frappe.utils.icon('x', 'xs')"></span>
@@ -557,6 +600,7 @@ import draggable from "vuedraggable";
 import { useStore } from "../../stores";
 import LetterHeadZoneInspector from "./LetterHeadZoneInspector.vue";
 import Autocomplete from "../../../vue-components/Autocomplete.vue";
+import VisibilitySection from "./VisibilitySection.vue";
 
 let store = inject("$store");
 let { letterhead, layout } = useStore();
@@ -565,6 +609,7 @@ let selected_field = computed(() => store.selected_field.value);
 let selected_section = computed(() => store.selected_section.value);
 let selected_letterhead = computed(() => store.selected_letterhead.value);
 let selected_lh_footer = computed(() => store.selected_lh_footer.value);
+let preview_doc = computed(() => store.preview_doc.value);
 
 const open = ref({
 	f_field: true,
@@ -575,6 +620,7 @@ const open = ref({
 	s_visibility: false,
 	t_table: true,
 	t_columns: true,
+	t_visibility: true,
 });
 
 function toggle(key) {
@@ -653,6 +699,7 @@ let short_fieldtype = computed(() => {
 
 let current_show_label = computed(() => selected_field.value?.show_label ?? "show");
 let current_align = computed(() => selected_field.value?.align ?? "left");
+let current_label_justify = computed(() => selected_field.value?.label_justify ?? "");
 
 const show_label_opts = [
 	{ value: "show", label: __("Show") },
@@ -943,7 +990,7 @@ function set_padding(side, value) {
 	border: none;
 	background: transparent;
 	cursor: pointer;
-	border-radius: var(--border-radius-sm);
+	border-radius: var(--radius);
 	color: var(--text-muted);
 	font-size: var(--text-xs);
 	transition: background 0.1s, color 0.1s;
@@ -952,7 +999,6 @@ function set_padding(side, value) {
 
 .pfb-breadcrumb-btn:hover {
 	background: var(--gray-100);
-	color: var(--blue-500);
 }
 
 .pfb-breadcrumb-label {
@@ -1062,7 +1108,7 @@ function set_padding(side, value) {
 	justify-content: space-between;
 	padding: 5px 8px;
 	border: 1px solid var(--border-color);
-	border-radius: var(--border-radius);
+	border-radius: var(--radius);
 	background: var(--control-bg);
 	gap: 6px;
 	min-width: 0;
@@ -1082,7 +1128,7 @@ function set_padding(side, value) {
 	color: var(--text-muted);
 	background: var(--gray-100);
 	border: 1px solid var(--gray-300);
-	border-radius: var(--border-radius-sm);
+	border-radius: var(--radius);
 	padding: 1px 5px;
 	white-space: nowrap;
 	flex-shrink: 0;
@@ -1094,7 +1140,7 @@ function set_padding(side, value) {
 	padding: 6px 8px;
 	font-size: var(--text-sm);
 	border: 1px solid var(--border-color);
-	border-radius: var(--border-radius);
+	border-radius: var(--radius);
 	background: var(--fg-color);
 	color: var(--text-color);
 	outline: none;
@@ -1105,12 +1151,28 @@ function set_padding(side, value) {
 	border-color: var(--gray-500);
 }
 
+.pfb-insp-select {
+	width: 100%;
+	padding: 5px 8px;
+	font-size: var(--text-sm);
+	border: 1px solid var(--border-color);
+	border-radius: var(--radius);
+	background: var(--fg-color);
+	color: var(--text-color);
+	outline: none;
+	cursor: pointer;
+}
+
+.pfb-insp-select:focus {
+	border-color: var(--gray-500);
+}
+
 /* ── Segmented control ───────────────────────────────────── */
 .pfb-seg {
 	display: inline-flex;
 	background: var(--control-bg);
 	border: 1px solid var(--border-color);
-	border-radius: var(--border-radius);
+	border-radius: var(--radius);
 	overflow: hidden;
 	width: 100%;
 }
@@ -1151,7 +1213,7 @@ function set_padding(side, value) {
 	display: inline-flex;
 	align-items: center;
 	border: 1px solid var(--border-color);
-	border-radius: var(--border-radius);
+	border-radius: var(--radius);
 	overflow: hidden;
 	background: var(--subtle-accent);
 	width: 100%;
@@ -1229,7 +1291,7 @@ function set_padding(side, value) {
 .pfb-swatch {
 	width: 28px;
 	height: 28px;
-	border-radius: var(--border-radius);
+	border-radius: var(--radius);
 	border: 1.5px solid var(--border-color);
 	cursor: pointer;
 	padding: 0;
@@ -1284,7 +1346,7 @@ function set_padding(side, value) {
 	color: var(--red-500);
 	background: transparent;
 	border: 1px solid var(--red-200);
-	border-radius: var(--border-radius);
+	border-radius: var(--radius);
 	padding: 5px 10px;
 	font-size: var(--text-sm);
 	cursor: pointer;
@@ -1338,7 +1400,7 @@ function set_padding(side, value) {
 	font-size: var(--text-tiny);
 	text-align: right;
 	border: 1px solid var(--border-color);
-	border-radius: var(--border-radius-sm);
+	border-radius: var(--radius);
 	background: var(--fg-color);
 	flex-shrink: 0;
 }
@@ -1368,7 +1430,7 @@ function set_padding(side, value) {
 	background: transparent;
 	cursor: pointer;
 	color: var(--gray-300);
-	border-radius: var(--border-radius-sm);
+	border-radius: var(--radius);
 	flex-shrink: 0;
 }
 
@@ -1418,7 +1480,7 @@ function set_padding(side, value) {
 	color: var(--text-muted);
 	padding: 6px 8px;
 	border: 1px solid var(--border-color);
-	border-radius: var(--border-radius);
+	border-radius: var(--radius);
 	background: var(--gray-50);
 	max-height: 80px;
 	overflow: hidden;
@@ -1450,7 +1512,7 @@ function set_padding(side, value) {
 	color: var(--text-muted);
 	padding: 6px 8px;
 	border: 1px solid var(--border-color);
-	border-radius: var(--border-radius);
+	border-radius: var(--radius);
 	background: var(--gray-50);
 	max-height: 100px;
 	overflow: hidden;
@@ -1522,7 +1584,7 @@ function set_padding(side, value) {
 	font-size: 13px;
 	font-family: var(--monospace-font-family, monospace);
 	border: 1px solid var(--border-color);
-	border-radius: var(--border-radius);
+	border-radius: var(--radius);
 }
 
 .pfb-html-ctrl-host .CodeMirror-scroll {
