@@ -1995,6 +1995,7 @@ class Document(BaseDocument):
 			doc_to_compare = frappe.get_doc(self.doctype, amended_from)
 
 		version = frappe.new_doc("Version")
+		version.document_status = self.docstatus
 
 		if not doc_to_compare and not self.flags.updater_reference:
 			return
